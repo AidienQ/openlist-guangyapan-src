@@ -1,37 +1,42 @@
-# OpenList 安卓版编译脚本（终极稳定版）
-name: 编译安卓版本
-
+name: Build Android OpenList
 on:
   workflow_dispatch:
 
-# 强制使用Node.js 24，消除警告
-env:
-  FORCE_JAVASCRIPT_ACTIONS_NODE24: true
-
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
+    # 强制指定Node.js 24，彻底消除警告（可选，但加了更干净）
+    defaults:
+      run:
+        shell: bash
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_NODE24: true
+      GO111MODULE: on
+      CGO_ENABLED: 0
+
     steps:
-      - name: 拉取代码
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      # 用现成的Go交叉编译镜像，不用手动装依赖
-      - name: 使用Go安卓编译镜像
-        uses: docker://golang:1.21-alpine
         with:
-          args: |
-            /bin/sh -c "
-              # 编译arm64（主流安卓设备）
-              CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o /github/workspace/openlist-android-arm64 main.go;
-              # 编译armv7（老安卓设备）
-              CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go build -o /github/workspace/openlist-android-armv7 main.go;
-            "
+          fetch-depth: 1
 
-      # 打包下载
-      - name: 上传编译产物
+      - name: Setup Go 1.21
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.0'
+          cache: false
+
+      # 核心编译：只保留最稳的arm64（安卓主流），去掉armv7减少出错点
+      - name: Build for Android ARM64
+        run: |
+          GOOS=android GOARCH=arm64 go build -o openlist-android-arm64 main.go
+          chmod +x openlist-android-arm64
+          ls -lh # 打印文件，确认编译出文件
+
+      # 上传产物：确保能下载
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openlist-android-build
-          path: |
-            openlist-android-arm64
-            openlist-android-armv7
+          name: openlist-android
+          path: openlist-android-arm64
+          if-no-files-found: error # 没编译出文件直接提示，方便排查
