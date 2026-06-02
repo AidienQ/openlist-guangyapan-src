@@ -1,45 +1,37 @@
-# OpenList 安卓版自动编译脚本（修复版）
+# OpenList 安卓版编译脚本（终极稳定版）
 name: 编译安卓版本
 
-# 触发方式：手动点击运行
 on:
   workflow_dispatch:
 
-# 解决Node.js版本警告
+# 强制使用Node.js 24，消除警告
 env:
   FORCE_JAVASCRIPT_ACTIONS_NODE24: true
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
     steps:
-      - name: 拉取项目代码
+      - name: 拉取代码
         uses: actions/checkout@v4
 
-      - name: 安装Go环境和安卓交叉编译依赖
-        uses: actions/setup-go@v5
+      # 用现成的Go交叉编译镜像，不用手动装依赖
+      - name: 使用Go安卓编译镜像
+        uses: docker://golang:1.21-alpine
         with:
-          go-version: '1.21' # 匹配项目Go版本（如果项目用1.20/1.22，改成对应版本）
-          
-      - name: 安装安卓编译依赖（关键修复）
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
-          # 禁用CGO（Go编译安卓最稳的方式）
-          export CGO_ENABLED=0
+          args: |
+            /bin/sh -c "
+              # 编译arm64（主流安卓设备）
+              CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o /github/workspace/openlist-android-arm64 main.go;
+              # 编译armv7（老安卓设备）
+              CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go build -o /github/workspace/openlist-android-armv7 main.go;
+            "
 
-      - name: 编译安卓arm64（主流设备）
-        run: |
-          GOOS=android GOARCH=arm64 GOARM=7 go build -trimpath -ldflags "-s -w" -o openlist-android-arm64 main.go
-          
-      - name: 编译安卓armv7（老设备）
-        run: |
-          GOOS=android GOARCH=arm GOARM=7 go build -trimpath -ldflags "-s -w" -o openlist-android-armv7 main.go
-
-      - name: 打包编译结果
+      # 打包下载
+      - name: 上传编译产物
         uses: actions/upload-artifact@v4
         with:
-          name: openlist-android
+          name: openlist-android-build
           path: |
             openlist-android-arm64
             openlist-android-armv7
