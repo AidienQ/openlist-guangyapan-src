@@ -1,51 +1,42 @@
-name: Build for Android
+name: Build Android SO
 
 on:
-  push:                # 代码推送到任意分支时触发
-  workflow_dispatch:   # 允许在 Actions 页面手动触发
+  push: # 当代码推送到 main 分支时触发
+    branches: [ main ]
+  workflow_dispatch: # 允许手动触发
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # 定义目标架构，可根据需要添加
-        arch: [arm64, arm]
-        # 为不同架构指定对应的 NDK 编译器
-        include:
-          - arch: arm64
-            ndk_compiler: aarch64-linux-android21-clang
-            go_arch: arm64
-          - arch: arm
-            ndk_compiler: armv7a-linux-androideabi21-clang
-            go_arch: arm
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'  # 使用 Go 1.22 或更新版本
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21' # 可根据项目实际要求调整版本
 
-      - name: Set up Android NDK
-        run: |
-          echo "Downloading Android NDK r26c..."
-          wget -q https://dl.google.com/android/repository/android-ndk-r26c-linux.zip
-          unzip -q android-ndk-r26c-linux.zip
-          echo "${{ github.workspace }}/android-ndk-r26c/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+    - name: Setup Android NDK
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y unzip
+        # 下载 NDK r25c，可根据需要更换版本
+        wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+        unzip -q android-ndk-r25c-linux.zip
+        echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r25c" >> $GITHUB_ENV
+        echo "NDK_ROOT=$(pwd)/android-ndk-r25c" >> $GITHUB_ENV
 
-      - name: Build for Android (${{ matrix.arch }})
-        env:
-          GOOS: android
-          GOARCH: ${{ matrix.go_arch }}
-          CGO_ENABLED: 1
-          CC: ${{ matrix.ndk_compiler }}
-        run: |
-          go build -v -o openlist-guangyapan-android-${{ matrix.arch }} .
+    - name: Build for Android arm64
+      run: |
+        export NDK_ROOT=$ANDROID_NDK_HOME
+        export CC=$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+        export GOOS=android
+        export GOARCH=arm64
+        export CGO_ENABLED=1
+        go build -buildmode=c-shared -trimpath -ldflags="-s -w" -tags=jsoniter -o ./libopenlist.so .
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: openlist-android-${{ matrix.arch }}
-          path: openlist-guangyapan-android-${{ matrix.arch }}
+    - name: Upload SO artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: openlist-android-arm64
+        path: ./libopenlist.so
